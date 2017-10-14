@@ -21,8 +21,7 @@ import (
 //
 
 // RunEnvironment starts everything
-func RunEnvironment(readyChan chan error) {
-	installPath := "."
+func RunEnvironment(installPath string, readyChan chan error) {
 
 	var err error
 	quit := make(chan bool)
@@ -58,9 +57,11 @@ func RunEnvironment(readyChan chan error) {
 		}
 	}()
 
-	packagesToBuild := []string{
-		"github.com\\someusername\\somepackage",
-		"github.com\\someusername\\somepackage2",
+	packagesToBuild, err := getListOfPackagesToBuild(installPath)
+	if err != nil {
+		c.Println(err)
+		readyChan <- nil
+		return
 	}
 
 	fmt.Println("Package Builder Start")
@@ -114,6 +115,21 @@ func currentPath() string {
 	}
 
 	return dir
+}
+
+func getListOfPackagesToBuild(installPath string) (packages []string, err error) {
+	pkgFilePath := installPath + "/packages_to_build.txt"
+	dat, err := ioutil.ReadFile(pkgFilePath)
+	if err != nil {
+		return packages, err
+	}
+
+	fileContent := string(dat)
+	if len(fileContent) == 0 {
+		return packages, fmt.Errorf("file content is empty for %s", pkgFilePath)
+	}
+
+	return strings.Split(fileContent, "\n"), nil
 }
 
 func buildPackage(path string) (err error) {
