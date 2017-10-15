@@ -9,7 +9,7 @@ func TestRunEnvironment(t *testing.T) {
 }
 
 func BenchmarkRunEvenironment(b *testing.B) {
-        for n := 0; n < b.N; n++ {
-         	RunEnvironment()
-        }
+	for n := 0; n < b.N; n++ {
+		RunEnvironment()
+	}
 }
