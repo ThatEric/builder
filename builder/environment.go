@@ -6,9 +6,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/fatih/color"
 )
@@ -21,90 +20,41 @@ import (
 //
 
 // RunEnvironment starts everything
-func RunEnvironment(installPath string, readyChan chan error) {
-
+func RunEnvironment(installPath string, skipPackageBuild bool) {
 	var err error
-	quit := make(chan bool)
 	c := color.New(color.FgRed)
-
-	dat, _ := ioutil.ReadFile(installPath + "/builder_running.txt")
-	if len(dat) != 0 {
-		c.Println("Environment is already running")
-		readyChan <- nil
-		return
-	}
-
-	txt := []byte("running")
-	err = ioutil.WriteFile(installPath+"/builder_running.txt", txt, 0777)
-
-	if err != nil {
-		readyChan <- err
-		return
-	}
-
-	// Cleanup
-	defer func() {
-		if err = os.Remove(installPath + "/builder_running.txt"); err != nil {
-			readyChan <- fmt.Errorf("Remove Failed %v", err)
-		}
-	}()
-
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt)
-	go func() {
-		for _ = range signalCh {
-			quit <- true
-		}
-	}()
 
 	packagesToBuild, err := getListOfPackagesToBuild(installPath)
 	if err != nil {
 		c.Println(err)
-		readyChan <- nil
 		return
 	}
 
-	fmt.Println("Package Builder Start")
-
 	goPathSRC := fmt.Sprintf("%s\\src", os.Getenv("GOPATH"))
 
+	var wg sync.WaitGroup
 	// change directory then build then run!
 	for _, pkg := range packagesToBuild {
-		var localErr error
+		wg.Add(1)
 		packageDir := fmt.Sprintf("%s\\%s", goPathSRC, pkg)
 
-		if localErr = buildPackage(packageDir); localErr != nil {
+		if localErr := buildPackage(packageDir); localErr != nil {
 			c.Printf("Build:\t%s - Fail: %s\n", pkg, localErr)
-			readyChan <- localErr
 			break
 		} else {
 			fmt.Printf("Build:\t%s - Success\n", pkg)
 		}
 
-		if len(quit) > 0 {
-			break
-		}
-		time.Sleep(time.Second * 2)
-
 		go func(packageDir, pkg string) {
 			fmt.Printf("Run:\t%s\n", pkg)
-
 			if localErr := runProgram(packageDir); localErr != nil {
 				c.Printf("Fail:\t%s - %s\n", pkg, localErr)
-				readyChan <- localErr
 			}
-			quit <- true
+			wg.Done()
 		}(packageDir, pkg)
-
-		if len(quit) > 0 {
-			break
-		}
-		time.Sleep(time.Second)
 	}
 
-	fmt.Println("Waiting for interrupt")
-	readyChan <- nil
-	<-quit
+	wg.Wait()
 	fmt.Println("Package Builder End")
 }
 
@@ -129,7 +79,8 @@ func getListOfPackagesToBuild(installPath string) (packages []string, err error)
 		return packages, fmt.Errorf("file content is empty for %s", pkgFilePath)
 	}
 
-	return strings.Split(fileContent, "\n"), nil
+	// TODO: builder, update to better solution of splitting
+	return strings.Split(fileContent, "\r\n"), nil
 }
 
 func buildPackage(path string) (err error) {
