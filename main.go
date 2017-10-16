@@ -1,8 +1,13 @@
 package main
 
-import "builder/builder"
+import (
+	"builder/builder"
+	"fmt"
+)
 
 func main() {
-	readyChan := make(chan error)
-	builder.RunEnvironment(".", readyChan)
+	builder.RunEnvironment(".", false)
+
+	fmt.Println("press enter/return to quit")
+	fmt.Scanln()
 }
